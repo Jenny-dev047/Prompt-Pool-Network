@@ -309,3 +309,68 @@
         (ok (+ (get deadline prompt) additional-blocks))
     )
 )
+
+;; Function 9: Batch fund multiple prompts at once
+(define-public (batch-fund-prompts (prompt-ids (list 10 uint)) (amounts (list 10 uint)))
+    (let
+        (
+            (total-amount (fold + amounts u0))
+        )
+        (asserts! (> total-amount u0) err-insufficient-funds)
+        (try! (stx-transfer? total-amount tx-sender (as-contract tx-sender)))
+        (ok (map fund-prompt-internal prompt-ids amounts))
+    )
+)
+
+;; Internal helper for batch funding
+(define-private (fund-prompt-internal (prompt-id uint) (amount uint))
+    (match (map-get? prompts prompt-id)
+        prompt 
+            (begin
+                (map-set contributions 
+                    {prompt-id: prompt-id, contributor: tx-sender}
+                    (+ (get-contribution prompt-id tx-sender) amount)
+                )
+                (map-set prompts prompt-id 
+                    (merge prompt {current-funding: (+ (get current-funding prompt) amount)})
+                )
+                true
+            )
+        false
+    )
+)
+
+;; Function 10: Auto-close expired prompts
+(define-public (close-expired-prompt (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (>= stacks-block-height (get deadline prompt)) err-invalid-deadline)
+        (map-set prompts prompt-id (merge prompt {active: false}))
+        (ok true)
+    )
+)
+
+;; Function 11: Get detailed prompt analytics
+(define-public (get-prompt-analytics (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (ok {
+            prompt-id: prompt-id,
+            creator: (get creator prompt),
+            funding-percentage: (if (> (get funding-goal prompt) u0)
+                (/ (* (get current-funding prompt) u100) (get funding-goal prompt))
+                u0
+            ),
+            votes: (get votes prompt),
+            contributors: (get-contributor-count prompt-id),
+            days-remaining: (if (> (get deadline prompt) stacks-block-height)
+                (/ (- (get deadline prompt) stacks-block-height) u144)
+                u0
+            ),
+            is-funded: (>= (get current-funding prompt) (get funding-goal prompt)),
+            is-expired: (>= stacks-block-height (get deadline prompt)),
+            age-in-days: (/ (- stacks-block-height (get created-at prompt)) u144)
+        })
+    )
+)

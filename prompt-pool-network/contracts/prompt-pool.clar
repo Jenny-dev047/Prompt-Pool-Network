@@ -120,3 +120,72 @@
         err-not-found
     )
 )
+
+;; Public functions
+(define-public (create-prompt (title (string-ascii 100)) (description (string-ascii 500)) (funding-goal uint))
+    (let
+        ((new-id (var-get prompt-id-nonce)))
+        (map-set prompts new-id
+            {
+                creator: tx-sender,
+                title: title,
+                description: description,
+                funding-goal: funding-goal,
+                current-funding: u0,
+                votes: u0,
+                active: true,
+                deadline: (+ stacks-block-height u4320),
+                created-at: stacks-block-height
+            }
+        )
+        (map-set contributor-count new-id u0)
+        (var-set prompt-id-nonce (+ new-id u1))
+        (ok new-id)
+    )
+)
+
+(define-public (vote-prompt (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (not (has-voted prompt-id tx-sender)) err-already-voted)
+        (map-set votes {prompt-id: prompt-id, voter: tx-sender} true)
+        (map-set prompts prompt-id (merge prompt {votes: (+ (get votes prompt) u1)}))
+        (ok true)
+    )
+)
+
+(define-public (fund-prompt (prompt-id uint) (amount uint))
+    (let
+        (
+            (prompt (unwrap! (map-get? prompts prompt-id) err-not-found))
+            (previous-contribution (get-contribution prompt-id tx-sender))
+            (current-contributors (get-contributor-count prompt-id))
+        )
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (< stacks-block-height (get deadline prompt)) err-deadline-passed)
+        (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
+        (map-set contributions 
+            {prompt-id: prompt-id, contributor: tx-sender}
+            (+ previous-contribution amount)
+        )
+        (map-set prompts prompt-id 
+            (merge prompt {current-funding: (+ (get current-funding prompt) amount)})
+        )
+        ;; Increment contributor count if first-time contributor
+        (if (is-eq previous-contribution u0)
+            (map-set contributor-count prompt-id (+ current-contributors u1))
+            true
+        )
+        (ok true)
+    )
+)
+
+(define-public (close-prompt (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (map-set prompts prompt-id (merge prompt {active: false}))
+        (ok true)
+    )
+)

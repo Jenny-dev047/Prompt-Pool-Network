@@ -285,6 +285,7 @@
 )
 
 ;; Function 7: Add tags to prompts for categorization
+;; #[allow(unchecked_data)]
 (define-public (add-tag (prompt-id uint) (tag (string-ascii 50)))
     (let
         ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))

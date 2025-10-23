@@ -242,13 +242,70 @@
     )
 )
 
-;; Function 10: Auto-close expired prompts
-(define-public (close-expired-prompt (prompt-id uint))
+;; Function 4: Update prompt details
+(define-public (update-prompt (prompt-id uint) (new-title (string-ascii 100)) (new-description (string-ascii 500)))
     (let
         ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
         (asserts! (get active prompt) err-prompt-not-active)
-        (asserts! (>= stacks-block-height (get deadline prompt)) err-invalid-deadline)
-        (map-set prompts prompt-id (merge prompt {active: false}))
+        (map-set prompts prompt-id 
+            (merge prompt {
+                title: new-title,
+                description: new-description
+            })
+        )
         (ok true)
+    )
+)
+
+;; Function 5: Transfer prompt ownership
+(define-public (transfer-prompt-ownership (prompt-id uint) (new-owner principal))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (map-set prompts prompt-id (merge prompt {creator: new-owner}))
+        (ok true)
+    )
+)
+
+;; Function 6: Increase funding goal
+(define-public (increase-funding-goal (prompt-id uint) (additional-amount uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (> additional-amount u0) err-insufficient-funds)
+        (map-set prompts prompt-id 
+            (merge prompt {
+                funding-goal: (+ (get funding-goal prompt) additional-amount)
+            })
+        )
+        (ok (+ (get funding-goal prompt) additional-amount))
+    )
+)
+
+;; Function 7: Add tags to prompts for categorization
+(define-public (add-tag (prompt-id uint) (tag (string-ascii 50)))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (map-set prompt-tags {prompt-id: prompt-id, tag: tag} true)
+        (ok true)
+    )
+)
+
+;; Function 8: Extend deadline for active prompt
+(define-public (extend-deadline (prompt-id uint) (additional-blocks uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (> additional-blocks u0) err-invalid-deadline)
+        (map-set prompts prompt-id 
+            (merge prompt {
+                deadline: (+ (get deadline prompt) additional-blocks)
+            })
+        )
+        (ok (+ (get deadline prompt) additional-blocks))
     )
 )

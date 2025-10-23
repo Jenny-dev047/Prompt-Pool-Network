@@ -62,3 +62,61 @@
     uint
 )
 
+;; Read-only functions
+(define-read-only (get-prompt (prompt-id uint))
+    (map-get? prompts prompt-id)
+)
+
+(define-read-only (has-voted (prompt-id uint) (voter principal))
+    (default-to false (map-get? votes {prompt-id: prompt-id, voter: voter}))
+)
+
+(define-read-only (get-contribution (prompt-id uint) (contributor principal))
+    (default-to u0 (map-get? contributions {prompt-id: prompt-id, contributor: contributor}))
+)
+
+(define-read-only (get-next-prompt-id)
+    (var-get prompt-id-nonce)
+)
+
+(define-read-only (get-funding-progress (prompt-id uint))
+    (match (map-get? prompts prompt-id)
+        prompt (ok {
+            current: (get current-funding prompt),
+            goal: (get funding-goal prompt),
+            percentage: (if (> (get funding-goal prompt) u0)
+                (/ (* (get current-funding prompt) u100) (get funding-goal prompt))
+                u0
+            ),
+            reached: (>= (get current-funding prompt) (get funding-goal prompt))
+        })
+        err-not-found
+    )
+)
+
+(define-read-only (get-platform-stats)
+    (ok {
+        total-prompts: (var-get prompt-id-nonce),
+        total-funded: (var-get total-prompts-funded),
+        total-amount: (var-get total-funding-amount)
+    })
+)
+
+(define-read-only (has-withdrawn (prompt-id uint))
+    (default-to false (map-get? withdrawn-funds prompt-id))
+)
+
+(define-read-only (get-contributor-count (prompt-id uint))
+    (default-to u0 (map-get? contributor-count prompt-id))
+)
+
+(define-read-only (has-tag (prompt-id uint) (tag (string-ascii 50)))
+    (default-to false (map-get? prompt-tags {prompt-id: prompt-id, tag: tag}))
+)
+
+(define-read-only (is-deadline-passed (prompt-id uint))
+    (match (map-get? prompts prompt-id)
+        prompt (ok (>= stacks-block-height (get deadline prompt)))
+        err-not-found
+    )
+)

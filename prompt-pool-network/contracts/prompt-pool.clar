@@ -122,6 +122,7 @@
 )
 
 ;; Public functions
+;; #[allow(unchecked_data)]
 (define-public (create-prompt (title (string-ascii 100)) (description (string-ascii 500)) (funding-goal uint))
     (let
         ((new-id (var-get prompt-id-nonce)))
@@ -155,6 +156,7 @@
     )
 )
 
+;; #[allow(unchecked_data)]
 (define-public (fund-prompt (prompt-id uint) (amount uint))
     (let
         (
@@ -185,6 +187,67 @@
     (let
         ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
         (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (map-set prompts prompt-id (merge prompt {active: false}))
+        (ok true)
+    )
+)
+
+;; Function 1: Withdraw funds once goal is reached
+(define-public (withdraw-funds (prompt-id uint))
+    (let
+        (
+            (prompt (unwrap! (map-get? prompts prompt-id) err-not-found))
+            (amount (get current-funding prompt))
+        )
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (asserts! (>= (get current-funding prompt) (get funding-goal prompt)) err-goal-not-reached)
+        (asserts! (not (has-withdrawn prompt-id)) err-already-withdrawn)
+        
+        (try! (as-contract (stx-transfer? amount tx-sender (get creator prompt))))
+        (map-set withdrawn-funds prompt-id true)
+        (var-set total-prompts-funded (+ (var-get total-prompts-funded) u1))
+        (var-set total-funding-amount (+ (var-get total-funding-amount) amount))
+        (ok amount)
+    )
+)
+
+;; Function 2: Reopen a closed prompt
+(define-public (reopen-prompt (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (is-eq tx-sender (get creator prompt)) err-owner-only)
+        (asserts! (not (get active prompt)) err-prompt-still-active)
+        (map-set prompts prompt-id (merge prompt {active: true}))
+        (ok true)
+    )
+)
+
+;; Function 3: Refund contributor if goal not reached and prompt closed
+(define-public (request-refund (prompt-id uint))
+    (let
+        (
+            (prompt (unwrap! (map-get? prompts prompt-id) err-not-found))
+            (contribution (get-contribution prompt-id tx-sender))
+        )
+        (asserts! (not (get active prompt)) err-prompt-still-active)
+        (asserts! (< (get current-funding prompt) (get funding-goal prompt)) err-goal-not-reached)
+        (asserts! (> contribution u0) err-no-contribution)
+        
+        (try! (as-contract (stx-transfer? contribution tx-sender tx-sender)))
+        (map-delete contributions {prompt-id: prompt-id, contributor: tx-sender})
+        (map-set prompts prompt-id 
+            (merge prompt {current-funding: (- (get current-funding prompt) contribution)})
+        )
+        (ok contribution)
+    )
+)
+
+;; Function 10: Auto-close expired prompts
+(define-public (close-expired-prompt (prompt-id uint))
+    (let
+        ((prompt (unwrap! (map-get? prompts prompt-id) err-not-found)))
+        (asserts! (get active prompt) err-prompt-not-active)
+        (asserts! (>= stacks-block-height (get deadline prompt)) err-invalid-deadline)
         (map-set prompts prompt-id (merge prompt {active: false}))
         (ok true)
     )

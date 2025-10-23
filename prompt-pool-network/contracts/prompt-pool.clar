@@ -1,30 +1,64 @@
+;; PromptPool Network
+;; A platform for proposing, voting on, and funding AI prompt ideas
 
-;; title: prompt-pool
-;; version:
-;; summary:
-;; description:
+;; Constants
+(define-constant contract-owner tx-sender)
+(define-constant err-owner-only (err u100))
+(define-constant err-not-found (err u101))
+(define-constant err-already-voted (err u102))
+(define-constant err-insufficient-funds (err u103))
+(define-constant err-prompt-not-active (err u104))
+(define-constant err-goal-not-reached (err u105))
+(define-constant err-already-withdrawn (err u106))
+(define-constant err-no-contribution (err u107))
+(define-constant err-prompt-still-active (err u108))
+(define-constant err-deadline-passed (err u109))
+(define-constant err-invalid-deadline (err u110))
+(define-constant err-cannot-downvote (err u111))
 
-;; traits
-;;
+;; Data Variables
+(define-data-var prompt-id-nonce uint u0)
+(define-data-var total-prompts-funded uint u0)
+(define-data-var total-funding-amount uint u0)
 
-;; token definitions
-;;
+;; Data Maps
+(define-map prompts
+    uint
+    {
+        creator: principal,
+        title: (string-ascii 100),
+        description: (string-ascii 500),
+        funding-goal: uint,
+        current-funding: uint,
+        votes: uint,
+        active: bool,
+        deadline: uint,
+        created-at: uint
+    }
+)
 
-;; constants
-;;
+(define-map votes
+    {prompt-id: uint, voter: principal}
+    bool
+)
 
-;; data vars
-;;
+(define-map contributions
+    {prompt-id: uint, contributor: principal}
+    uint
+)
 
-;; data maps
-;;
+(define-map withdrawn-funds
+    uint
+    bool
+)
 
-;; public functions
-;;
+(define-map prompt-tags
+    {prompt-id: uint, tag: (string-ascii 50)}
+    bool
+)
 
-;; read only functions
-;;
-
-;; private functions
-;;
+(define-map contributor-count
+    uint
+    uint
+)
 
